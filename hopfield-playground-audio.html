@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HOPFIELD PLAYGROUND · Pattern Retrieval</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000000;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,255,200,0.03) 0px, rgba(0,255,200,0.03) 2px, transparent 2px, transparent 6px);
+            pointer-events: none;
+            z-index: 999;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #0a0a0a;
+            border: 1px solid #00ffcc30;
+            padding: 24px;
+        }
+        .header { text-align: center; margin-bottom: 24px; border-bottom: 1px solid #00ffcc30; padding-bottom: 16px; }
+        .header h1 { color: #00ffcc; font-size: 1.6rem; letter-spacing: 2px; }
+        .header h1 span { color: #ff00aa; }
+        .header p { color: #44ffaa; font-size: 0.75rem; margin-top: 8px; }
+        .two-columns { display: flex; gap: 30px; flex-wrap: wrap; }
+        .column { flex: 1; min-width: 300px; }
+        .section-title { color: #00ffcc; font-size: 0.8rem; margin-bottom: 12px; border-left: 3px solid #00ffcc; padding-left: 8px; }
+
+        .canvas-container {
+            background: #001010;
+            padding: 20px;
+            border: 1px solid #00ffcc20;
+            text-align: center;
+        }
+
+        .crt-monitor {
+            display: inline-block;
+            position: relative;
+            filter: drop-shadow(0 0 18px rgba(255,80,30,0.35))
+                    drop-shadow(0 0 50px rgba(255,50,10,0.15));
+        }
+
+        .crt-bezel {
+            position: relative;
+            border-radius: 18px / 20px;
+            background: radial-gradient(ellipse 85% 80% at 50% 50%, #1a0800 0%, #0d0400 50%, #050100 100%);
+            padding: 12px;
+            border: 1.5px solid #1a0800;
+        }
+
+        .crt-screen {
+            position: relative;
+            transform: perspective(900px) rotateX(1deg) scale(1.01);
+            filter: contrast(1.05) saturate(1.05);
+            border-radius: 12px / 14px;
+            overflow: hidden;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.85), inset 0 0 12px rgba(0,0,0,0.6);
+        }
+
+        canvas#patternCanvas {
+            display: block;
+            background: #000;
+            cursor: crosshair;
+            border: none;
+            filter: saturate(0.9) contrast(1.05);
+        }
+
+        .crt-scanlines {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(0deg, transparent 0px, transparent 3px, rgba(0,0,0,0.22) 3px, rgba(0,0,0,0.22) 4px);
+            pointer-events: none;
+            z-index: 5;
+            border-radius: 12px / 14px;
+        }
+
+        .crt-vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 80% 75% at 50% 50%, transparent 45%, rgba(0,0,0,0.45) 72%, rgba(0,0,0,0.88) 92%, rgba(0,0,0,0.97) 100%);
+            pointer-events: none;
+            z-index: 6;
+            border-radius: 12px / 14px;
+        }
+
+        .crt-chroma {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 7;
+            mix-blend-mode: screen;
+            opacity: 0.12;
+            background: radial-gradient(ellipse 55% 50% at 47% 50%, rgba(255,0,0,0.15) 0%, transparent 65%), radial-gradient(ellipse 55% 50% at 53% 50%, rgba(0,60,255,0.15) 0%, transparent 65%);
+            border-radius: 12px / 14px;
+        }
+
+        .crt-glare {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 35%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, transparent 100%);
+            pointer-events: none;
+            z-index: 8;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .pattern-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 15px; flex-wrap: wrap; }
+        .control-group { margin-bottom: 20px; }
+        .control-group label { color: #00ffcc; font-size: 0.7rem; display: block; margin-bottom: 8px; }
+        input[type="range"] { width: 100%; background: #001a1a; height: 2px; -webkit-appearance: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: #00ffcc; border-radius: 0; cursor: pointer; }
+        .value-display { color: #ff00aa; font-size: 0.7rem; margin-top: 5px; }
+        .stats-grid { display: flex; gap: 12px; margin: 16px 0; }
+        .stat-card { background: #051010; padding: 10px; flex: 1; text-align: center; border-left: 2px solid #00ffcc; }
+        .stat-label { color: #44ffaa; font-size: 0.65rem; }
+        .stat-value { color: #00ffcc; font-size: 1.3rem; font-weight: bold; }
+        button {
+            background: transparent;
+            border: 1px solid #00ffcc;
+            color: #00ffcc;
+            padding: 8px 16px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+        button:hover { background: #00ffcc20; box-shadow: 0 0 8px #00ffcc40; }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .action-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .message { margin-top: 20px; padding: 12px; background: #051010; color: #44ffaa; font-size: 0.7rem; text-align: center; }
+        .footer { text-align: center; margin-top: 24px; font-size: 0.6rem; color: #00ffcc40; }
+        .footer a { color: #00ffcc; text-decoration: none; }
+        pre { color: #44ffaa; font-size: 0.65rem; background: #051010; padding: 12px; margin-top: 16px; border-left: 2px solid #ff00aa; }
+        .audio-toggle { margin-top: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>HOPFIELD <span>PLAYGROUND</span></h1>
+        <p>educational tool · Hopfield networks · inspired by Pattern Retrieval</p>
+    </div>
+    <div class="two-columns">
+        <div class="column">
+            <div class="section-title">🎨 STEP 1 · DRAW A PATTERN</div>
+            <div class="canvas-container">
+                <div class="crt-monitor">
+                    <div class="crt-bezel">
+                        <div class="crt-screen">
+                            <canvas id="patternCanvas" width="200" height="200"></canvas>
+                            <div class="crt-scanlines"></div>
+                            <div class="crt-vignette"></div>
+                            <div class="crt-chroma"></div>
+                            <div class="crt-glare"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pattern-buttons">
+                    <button id="clearBtn">CLEAR</button>
+                    <button id="drawA">DRAW 'A'</button>
+                    <button id="drawHash">DRAW '#'</button>
+                </div>
+            </div>
+            <div class="section-title" style="margin-top: 20px;">💾 STEP 2 · STORE MEMORY</div>
+            <button id="storeBtn" style="width: 100%;">STORE PATTERN IN HOPFIELD NETWORK</button>
+            <pre id="storageStatus">📭 No pattern stored yet</pre>
+        </div>
+        <div class="column">
+            <div class="section-title">🌀 STEP 3 · CORRUPT &amp; RETRIEVE</div>
+            <div class="control-group">
+                <label>🔊 NOISE LEVEL · SHATTER MEMORY</label>
+                <input type="range" id="noiseSlider" min="0" max="50" value="25">
+                <div class="value-display" id="noiseValue">25%</div>
+            </div>
+            <div class="control-group">
+                <label>⚡ λ (LAMBDA) · BIAS STRENGTH</label>
+                <input type="range" id="lambdaSlider" min="0" max="1" step="0.01" value="0.35">
+                <div class="value-display" id="lambdaValue">0.35</div>
+            </div>
+            <div class="control-group">
+                <label>🔄 PASSES · RETRIEVAL ITERATIONS</label>
+                <input type="range" id="passesSlider" min="1" max="20" value="8">
+                <div class="value-display" id="passesValue">8</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card"><div class="stat-label">ENERGY</div><div class="stat-value" id="energyVal">0.00</div></div>
+                <div class="stat-card"><div class="stat-label">OVERLAP</div><div class="stat-value" id="overlapVal">0%</div></div>
+            </div>
+            <div class="action-buttons">
+                <button id="corruptBtn">🌪️ CORRUPT MEMORY</button>
+                <button id="retrieveBtn">🔮 RETRIEVE (8 PASSES)</button>
+                <button id="resetRetrievalBtn">✨ RESET TO STORED</button>
+            </div>
+            <div class="audio-toggle">
+                <button id="toggleAudioBtn">🔇 MUTE AUDIO</button>
+            </div>
+        </div>
+    </div>
+    <div class="message" id="message">🧠 DRAW → STORE → CORRUPT → RETRIEVE</div>
+    <div class="footer">🎨 inspired by <a href="https://patternretrieval.app" target="_blank">PATTERN RETRIEVAL by Adam Ilenich</a></div>
+</div>
+
+<script>
+    const SIZE = 10;
+    const CELL_SIZE = 20;
+    const N = SIZE * SIZE;
+
+    const canvas = document.getElementById('patternCanvas');
+    const ctx    = canvas.getContext('2d');
+
+    let audioCtx = null;
+    let isAudioEnabled = true;
+    let currentOscillator = null;
+    let currentGain = null;
+    let animationTimeout = null;
+
+    // ── Patterns ───────────────────────────────────────────────────────────────
+    const PATTERN_A = [
+        [0,0,0,0,1,1,0,0,0,0],
+        [0,0,0,1,0,0,1,0,0,0],
+        [0,0,1,0,0,0,0,1,0,0],
+        [0,1,1,1,1,1,1,1,1,0],
+        [0,1,0,0,0,0,0,0,1,0],
+        [0,1,0,0,0,0,0,0,1,0],
+        [0,1,1,1,1,1,1,1,1,0],
+        [0,1,0,0,0,0,0,0,1,0],
+        [0,1,0,0,0,0,0,0,1,0],
+        [0,1,0,0,0,0,0,0,1,0]
+    ];
+
+    const PATTERN_HASH = [
+        [0,0,0,0,0,0,0,0,0,0],
+        [0,0,1,0,0,1,0,0,1,0],
+        [0,1,1,1,1,1,1,1,1,0],
+        [0,0,1,0,0,1,0,0,1,0],
+        [0,1,1,1,1,1,1,1,1,0],
+        [0,0,1,0,0,1,0,0,1,0],
+        [0,0,1,0,0,1,0,0,1,0],
+        [0,0,1,0,0,1,0,0,1,0],
+        [0,0,1,0,0,1,0,0,1,0],
+        [0,0,0,0,0,0,0,0,0,0]
+    ];
+
+    let drawingGrid  = Array(SIZE).fill().map(() => Array(SIZE).fill(0));
+    let storedPattern = null;
+    let storedGrid    = null;
+    let weights       = Array(N).fill().map(() => Array(N).fill(0));
+    let isTrained     = false;
+    let currentState  = null;
+
+    // ── Per-cell brightness for CRT phosphor fade ──────────────────────────────
+    let cellBrightness = Array.from({length: SIZE}, () => new Float32Array(SIZE));
+    let cellTarget     = Array.from({length: SIZE}, () => new Float32Array(SIZE));
+    const FADE_SPEED   = 2.8; // Faster fade for more responsive feel
+    let rafId          = null;
+    let lastTs         = 0;
+
+    function setTargetFromGrid(grid) {
+        for (let r = 0; r < SIZE; r++) {
+            for (let c = 0; c < SIZE; c++) {
+                cellTarget[r][c] = grid[r][c] ? 1 : 0;
+            }
+        }
+    }
+
+    function renderCRT(ts) {
+        rafId = requestAnimationFrame(renderCRT);
+        const dt = Math.min((ts - lastTs) / 1000, 0.08);
+        lastTs = ts;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0a0200';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let r = 0; r < SIZE; r++) {
+            for (let c = 0; c < SIZE; c++) {
+                let br = cellBrightness[r][c];
+                const tgt = cellTarget[r][c];
+                if (br < tgt) br = Math.min(br + FADE_SPEED * dt, tgt);
+                else br = Math.max(br - FADE_SPEED * dt, tgt);
+                cellBrightness[r][c] = br;
+
+                const x = c * CELL_SIZE;
+                const y = r * CELL_SIZE;
+                const w = CELL_SIZE - 1;
+                const h = CELL_SIZE - 1;
+
+                if (br < 0.01) {
+                    ctx.fillStyle = 'rgba(14,4,0,1)';
+                    ctx.fillRect(x, y, w, h);
+                    ctx.strokeStyle = 'rgba(50,12,0,0.2)';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+                } else {
+                    const flicker = 0.85 + Math.random() * 0.15;
+                    const bf = br * flicker;
+                    const rv = Math.round(Math.min(255, 200 + bf * 55));
+                    const gv = Math.round(bf * 72);
+                    const bv = Math.round(bf * 16);
+                    ctx.fillStyle = `rgb(${rv},${gv},${bv})`;
+                    ctx.fillRect(x, y, w, h);
+
+                    ctx.fillStyle = `rgba(0,0,0,${0.28 * bf})`;
+                    for (let sy = y; sy < y + h; sy += 4) {
+                        ctx.fillRect(x, sy + 2, w, 2);
+                    }
+
+                    const grad = ctx.createRadialGradient(
+                        x + w * 0.5, y + h * 0.38, 0,
+                        x + w * 0.5, y + h * 0.5,  w * 0.75
+                    );
+                    grad.addColorStop(0,   `rgba(255,210,170,${0.6 * bf})`);
+                    grad.addColorStop(0.45,`rgba(255,100,40,${0.28 * bf})`);
+                    grad.addColorStop(1,   'rgba(0,0,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(x, y, w, h);
+
+                    ctx.strokeStyle = `rgba(255,130,50,${0.25 * bf})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+                }
+            }
+        }
+    }
+
+    function startRenderLoop() {
+        if (rafId) return;
+        lastTs = performance.now();
+        rafId = requestAnimationFrame(renderCRT);
+    }
+
+    function getCurrentDisplayGrid() {
+        if (currentState && storedPattern) {
+            return toGrid(currentState);
+        }
+        if (storedGrid) return storedGrid;
+        return drawingGrid;
+    }
+
+    function refreshTarget() {
+        // CRITICAL: Always get the live display grid
+        let displayGrid = getCurrentDisplayGrid();
+        setTargetFromGrid(displayGrid);
+    }
+
+    // ── Audio ──────────────────────────────────────────────────────────────────
+    function initAudio() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    function resumeAudio() {
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    function playStoreSound() {
+        if (!isAudioEnabled) return;
+        initAudio(); resumeAudio();
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 523.25; gain.gain.value = 0.2;
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+        osc.stop(audioCtx.currentTime + 0.5);
+    }
+    function playPixelFlipSound() {
+        if (!isAudioEnabled) return;
+        initAudio(); resumeAudio();
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = 'triangle'; osc.frequency.value = 880; gain.gain.value = 0.08;
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.08);
+        osc.stop(audioCtx.currentTime + 0.08);
+    }
+    function playCorruptSound(noise) {
+        if (!isAudioEnabled) return;
+        initAudio(); resumeAudio();
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = 'sawtooth'; osc.frequency.value = 100 + noise * 10; gain.gain.value = 0.2;
+        osc.connect(gain); gain.connect(audioCtx.destination); osc.start();
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.3);
+        osc.stop(audioCtx.currentTime + 0.3);
+    }
+    function playRetrievalSound(overlap) {
+        if (!isAudioEnabled) return;
+        initAudio(); resumeAudio();
+        if (currentOscillator) { try { currentOscillator.stop(); } catch(e) {} }
+        const freq = 220 + (overlap / 100) * 440;
+        currentOscillator = audioCtx.createOscillator();
+        currentGain = audioCtx.createGain();
+        currentOscillator.type = 'sine'; currentOscillator.frequency.value = freq;
+        currentGain.gain.value = 0.3;
+        currentOscillator.connect(currentGain); currentGain.connect(audioCtx.destination);
+        currentOscillator.start();
+        currentGain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.8);
+        currentOscillator.stop(audioCtx.currentTime + 0.8);
+    }
+
+    // ── Grid helpers ───────────────────────────────────────────────────────────
+    function flatten(grid) {
+        const flat = [];
+        for (let i = 0; i < SIZE; i++)
+            for (let j = 0; j < SIZE; j++)
+                flat.push(grid[i][j] === 1 ? 1 : -1);
+        return flat;
+    }
+    function toGrid(flat) {
+        const grid = [];
+        for (let i = 0; i < SIZE; i++) {
+            const row = [];
+            for (let j = 0; j < SIZE; j++)
+                row.push(flat[i * SIZE + j] === 1 ? 1 : 0);
+            grid.push(row);
+        }
+        return grid;
+    }
+
+    // ── Canvas interaction ─────────────────────────────────────────────────────
+    function handleCanvasClick(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const col = Math.floor(((e.clientX - rect.left) * scaleX) / CELL_SIZE);
+        const row = Math.floor(((e.clientY - rect.top)  * scaleY) / CELL_SIZE);
+        if (row >= 0 && row < SIZE && col >= 0 && col < SIZE) {
+            drawingGrid[row][col] = drawingGrid[row][col] === 1 ? 0 : 1;
+            refreshTarget();
+            playPixelFlipSound();
+        }
+    }
+
+    function clearDrawing() {
+        if (animationTimeout) clearTimeout(animationTimeout);
+        drawingGrid   = Array(SIZE).fill().map(() => Array(SIZE).fill(0));
+        currentState  = null;
+        storedPattern = null;
+        storedGrid    = null;
+        isTrained     = false;
+        weights       = Array(N).fill().map(() => Array(N).fill(0));
+        document.getElementById('storageStatus').innerHTML = '📭 No pattern stored yet';
+        updateStats();
+        refreshTarget();
+        enableButtons(true);
+    }
+
+    function loadPattern(pattern) {
+        if (animationTimeout) clearTimeout(animationTimeout);
+        drawingGrid  = pattern.map(row => [...row]);
+        currentState = null;
+        refreshTarget();
+        enableButtons(true);
+    }
+
+    // ── Hopfield core ──────────────────────────────────────────────────────────
+    function trainHopfield(patternFlat) {
+        for (let i = 0; i < N; i++)
+            for (let j = 0; j < N; j++)
+                weights[i][j] = 0;
+        for (let i = 0; i < N; i++)
+            for (let j = 0; j < N; j++)
+                if (i !== j) weights[i][j] += patternFlat[i] * patternFlat[j];
+        for (let i = 0; i < N; i++)
+            for (let j = 0; j < N; j++)
+                weights[i][j] /= N;
+        isTrained = true;
+    }
+
+    function storePattern() {
+        if (animationTimeout) clearTimeout(animationTimeout);
+        storedGrid    = drawingGrid.map(row => [...row]);
+        storedPattern = flatten(storedGrid);
+        trainHopfield(storedPattern);
+        currentState  = [...storedPattern];
+        document.getElementById('storageStatus').innerHTML =
+            `✅ Stored: ${storedPattern.filter(v => v === 1).length} active neurons`;
+        document.getElementById('message').innerHTML = '💾 Pattern stored! Now CORRUPT it.';
+        updateStats();
+        playStoreSound();
+        refreshTarget();
+        enableButtons(true);
+    }
+
+    function corruptState(noisePercent) {
+        if (!isTrained) { document.getElementById('message').innerHTML = '⚠️ Store a pattern first!'; return; }
+        if (animationTimeout) clearTimeout(animationTimeout);
+        let newState = [...currentState];
+        const flips  = Math.floor((noisePercent / 100) * N);
+        for (let i = 0; i < flips; i++) {
+            const idx = Math.floor(Math.random() * N);
+            newState[idx] *= -1;
+        }
+        currentState = newState;
+        updateStats();
+        document.getElementById('message').innerHTML = `🌪️ Corrupted with ${noisePercent}% noise · ${flips} bits flipped`;
+        playCorruptSound(noisePercent);
+        refreshTarget();
+        enableButtons(true);
+    }
+
+    function hopfieldStep(state, lambda) {
+        const next = [...state];
+        for (let i = 0; i < N; i++) {
+            let sum = 0;
+            for (let j = 0; j < N; j++) sum += weights[i][j] * state[j];
+            if (storedPattern) sum += lambda * storedPattern[i];
+            next[i] = sum >= 0 ? 1 : -1;
+        }
+        return next;
+    }
+
+    function enableButtons(enabled) {
+        const btns = ['retrieveBtn', 'corruptBtn', 'resetRetrievalBtn', 'storeBtn', 'clearBtn', 'drawA', 'drawHash'];
+        btns.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = !enabled;
+        });
+    }
+
+    // ANIMATED RETRIEVAL - WITH VISUAL UPDATES
+    function runRetrieval(passes, lambda) {
+        if (!isTrained) { 
+            document.getElementById('message').innerHTML = '⚠️ Store a pattern first!'; 
+            return;
+        }
+        
+        if (animationTimeout) clearTimeout(animationTimeout);
+        
+        // Disable buttons during animation
+        enableButtons(false);
+
+        let state = [...currentState];
+        let step = 0;
+
+        function doNextPass() {
+            if (step >= passes) {
+                // Done — re-enable buttons
+                enableButtons(true);
+                const overlap = calculateOverlap(currentState);
+                document.getElementById('message').innerHTML =
+                    overlap === 100 ? '✓ PERFECT RETRIEVAL! ✓' : `🔄 Retrieved at ${overlap}%`;
+                playRetrievalSound(overlap);
+                animationTimeout = null;
+                return;
+            }
+
+            step++;
+            for(let k = 0; k < 15; k++){
+                const i = Math.floor(Math.random() * N);
+                let sum = 0;
+                for(let j = 0; j < N; j++){
+                    sum += weights[i][j] * state[j];
+                }
+                sum += lambda * storedPattern[i];
+                state[i] = sum >= 0 ? 1 : -1;
+            }
+            currentState = state;
+            updateStats();
+
+            const overlap = calculateOverlap(currentState);
+            document.getElementById('message').innerHTML =
+                `🔄 Pass ${step} / ${passes} · overlap ${overlap}%`;
+            
+            // Play a tone that rises as retrieval improves
+            playRetrievalSound(overlap);
+            
+            // CRITICAL: Force immediate visual update
+            refreshTarget();
+
+            // Wait 400ms then do the next pass
+            animationTimeout = setTimeout(doNextPass, 90);
+        }
+
+        doNextPass();
+    }
+
+    function calculateOverlap(state) {
+        if (!storedPattern) return 0;
+        let matches = 0;
+        for (let i = 0; i < N; i++) if (state[i] === storedPattern[i]) matches++;
+        return Math.floor((matches / N) * 100);
+    }
+
+    function calculateEnergy(state) {
+        if (!isTrained) return 0;
+        let energy = 0;
+        for (let i = 0; i < N; i++)
+            for (let j = 0; j < N; j++)
+                energy -= weights[i][j] * state[i] * state[j];
+        return (energy / 2).toFixed(2);
+    }
+
+    function updateStats() {
+        if (!currentState || !storedPattern) {
+            document.getElementById('energyVal').innerText = '0.00';
+            document.getElementById('overlapVal').innerText = '0%';
+            return;
+        }
+        document.getElementById('energyVal').innerText  = calculateEnergy(currentState);
+        document.getElementById('overlapVal').innerText = calculateOverlap(currentState) + '%';
+    }
+
+    function resetToStored() {
+        if (!storedPattern) { document.getElementById('message').innerHTML = '⚠️ No pattern stored'; return; }
+        if (animationTimeout) clearTimeout(animationTimeout);
+        currentState = [...storedPattern];
+        updateStats();
+        document.getElementById('message').innerHTML = '✨ Reset to original stored memory';
+        playRetrievalSound(100);
+        refreshTarget();
+        enableButtons(true);
+    }
+
+    function toggleAudio() {
+        isAudioEnabled = !isAudioEnabled;
+        const btn = document.getElementById('toggleAudioBtn');
+        if (isAudioEnabled) {
+            btn.innerHTML = '🔇 MUTE AUDIO'; btn.style.borderColor = '#00ffcc';
+            document.getElementById('message').innerHTML = '🔊 Audio enabled';
+        } else {
+            btn.innerHTML = '🔊 UNMUTE AUDIO'; btn.style.borderColor = '#ff00aa';
+            document.getElementById('message').innerHTML = '🔇 Audio disabled';
+        }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    function init() {
+        canvas.addEventListener('click', handleCanvasClick);
+
+        document.getElementById('clearBtn').addEventListener('click', clearDrawing);
+        document.getElementById('drawA').addEventListener('click',    () => loadPattern(PATTERN_A));
+        document.getElementById('drawHash').addEventListener('click', () => loadPattern(PATTERN_HASH));
+        document.getElementById('storeBtn').addEventListener('click', storePattern);
+        document.getElementById('corruptBtn').addEventListener('click', () =>
+            corruptState(parseInt(document.getElementById('noiseSlider').value)));
+        document.getElementById('retrieveBtn').addEventListener('click', () =>
+            runRetrieval(8,
+                         parseFloat(document.getElementById('lambdaSlider').value)));
+        document.getElementById('resetRetrievalBtn').addEventListener('click', resetToStored);
+        document.getElementById('toggleAudioBtn').addEventListener('click', toggleAudio);
+
+        // Sliders
+        const noiseSlider  = document.getElementById('noiseSlider');
+        const lambdaSlider = document.getElementById('lambdaSlider');
+        const passesSlider = document.getElementById('passesSlider');
+        const retrieveBtn  = document.getElementById('retrieveBtn');
+
+        noiseSlider.addEventListener('input',  () => { document.getElementById('noiseValue').innerText  = noiseSlider.value + '%'; });
+        lambdaSlider.addEventListener('input', () => { document.getElementById('lambdaValue').innerText = lambdaSlider.value; });
+        passesSlider.addEventListener('input', () => {
+            document.getElementById('passesValue').innerText = passesSlider.value;
+            retrieveBtn.innerHTML = `🔮 RETRIEVE (${passesSlider.value} PASSES)`;
+        });
+
+        refreshTarget();
+        startRenderLoop();
+    }
+
+    init();
+</script>
+</body>
+</html>
